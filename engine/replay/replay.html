@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{{CSP}}">
+<meta name="referrer" content="no-referrer">
+<meta name="generator" content="trace-studio">
+<title>{{TITLE}}</title>
+<style>{{CSS}}</style>
+</head>
+<body>
+<header class="masthead">
+  <div class="kicker"><span class="dot idle" id="rec" aria-hidden="true"></span><span>Agent run replay</span><span>{{KICKER}}</span></div>
+  <h1>{{HEADING}}</h1>
+  <button class="theme" id="theme" type="button">Light / dark</button>
+  <div class="meta">{{META}}</div>
+</header>
+<nav class="deck" aria-label="Playback">
+  <div class="deck-in">
+    <div class="controls">
+      <button class="btn" id="prev" type="button" aria-label="Previous step"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2h2v12H3zM14 2v12L6 8z"/></svg></button>
+      <button class="btn play" id="play" type="button" aria-label="Play"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="play-icon" d="M4 2l10 6-10 6z"/></svg></button>
+      <button class="btn" id="next" type="button" aria-label="Next step"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2h2v12h-2zM2 2v12l8-6z"/></svg></button>
+    </div>
+    <div class="track">
+      <canvas id="track" aria-hidden="true"></canvas>
+      <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="Step">
+      <div class="tip" id="tip" aria-hidden="true"></div>
+    </div>
+    <div class="readout">
+      <span class="now" id="now" aria-live="polite"></span>
+      <span id="clock"></span>
+      <select id="speed" aria-label="Speed"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option><option value="8">8×</option></select>
+      <select id="pace" aria-label="Pace"><option value="content">paced by content</option><option value="real">real gaps</option></select>
+      <label class="toggle"><input type="checkbox" id="all"> show all</label>
+    </div>
+  </div>
+</nav>
+<main class="layout">
+  <ol class="feed" id="feed" aria-label="Steps of the run"></ol>
+  <aside class="rail" aria-label="Summary">
+    <section><h2>The run</h2><dl class="big" id="big"></dl></section>
+    <section><h2>Tools used</h2><ul class="bars" id="tools"></ul></section>
+    <section><h2>Files changed</h2><ul class="files" id="files"></ul></section>
+    <section><h2>Anonymised</h2><div class="privacy" id="privacy"></div></section>
+  </aside>
+</main>
+<footer>{{FOOTER}}</footer>
+<script type="application/json" id="trace-data">{{DATA}}</script>
+<script>{{JS}}</script>
+</body>
+</html>

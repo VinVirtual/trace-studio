@@ -1,0 +1,74 @@
+{
+  "total": 56,
+  "counts": {
+    "key": 4,
+    "email": 2,
+    "home": 0,
+    "project": 44,
+    "path": 0,
+    "user": 2,
+    "host": 2,
+    "ip": 2,
+    "term": 0
+  },
+  "lines": {
+    "project": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30
+    ],
+    "key": [
+      28
+    ],
+    "email": [
+      28
+    ],
+    "host": [
+      28
+    ],
+    "ip": [
+      28
+    ],
+    "user": [
+      28
+    ]
+  },
+  "settings": {
+    "projects": 1,
+    "home": true,
+    "users": 2,
+    "hostnames": 1,
+    "terms": 0,
+    "allow": 0,
+    "envSecrets": 1,
+    "keepPaths": false,
+    "keepIps": false
+  },
+  "skippedLines": []
+}

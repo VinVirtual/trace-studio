@@ -1,0 +1,12 @@
+{
+  "name": "trace-studio",
+  "version": "0.1.0",
+  "description": "Turn an AI agent run into a replay you can watch and share: anonymised transcript, single-file HTML timeline, summary video and stats.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Lashvin Manimaran",
+  "private": true,
+  "bin": { "trace-studio": "engine/cli.mjs" },
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node engine/cli.mjs test" }
+}

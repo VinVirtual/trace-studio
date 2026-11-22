@@ -1,0 +1,146 @@
+{
+  "title": "Fix the word counter so case and punctuation do not split words",
+  "formats": [
+    "claude-code"
+  ],
+  "models": [
+    "demo-model (scripted)"
+  ],
+  "startedAt": "2026-11-20T09:30:00.000Z",
+  "endedAt": "2026-11-20T09:30:31.561Z",
+  "wallMs": 31561,
+  "activeMs": 31561,
+  "turnMs": 31711,
+  "toolMs": 2461,
+  "steps": 18,
+  "kinds": {
+    "prompt": 1,
+    "say": 5,
+    "tool": 10,
+    "think": 2
+  },
+  "prompts": 1,
+  "replies": 5,
+  "toolCalls": 10,
+  "toolErrors": 2,
+  "errorsFollowedBySuccess": 2,
+  "unfinishedCalls": 0,
+  "categories": {
+    "explore": 2,
+    "run": 5,
+    "edit": 3
+  },
+  "tools": [
+    {
+      "name": "Bash",
+      "category": "run",
+      "calls": 6,
+      "errors": 2,
+      "ms": 1841,
+      "timed": 6
+    },
+    {
+      "name": "Edit",
+      "category": "edit",
+      "calls": 3,
+      "errors": 0,
+      "ms": 465,
+      "timed": 3
+    },
+    {
+      "name": "Read",
+      "category": "explore",
+      "calls": 1,
+      "errors": 0,
+      "ms": 155,
+      "timed": 1
+    }
+  ],
+  "files": [
+    {
+      "path": "src/wordfreq.js",
+      "edits": 2,
+      "added": 2,
+      "removed": 3,
+      "created": false,
+      "deleted": false,
+      "steps": [
+        7,
+        14
+      ]
+    },
+    {
+      "path": "test/wordfreq.test.js",
+      "edits": 1,
+      "added": 4,
+      "removed": 0,
+      "created": false,
+      "deleted": false,
+      "steps": [
+        10
+      ]
+    }
+  ],
+  "linesAdded": 6,
+  "linesRemoved": 3,
+  "tokens": {
+    "input": 68,
+    "output": 795,
+    "cacheRead": 14577,
+    "cacheWrite": 0
+  },
+  "slowest": [
+    {
+      "step": 4,
+      "tool": "Bash",
+      "summary": "npm test",
+      "ms": 406
+    },
+    {
+      "step": 11,
+      "tool": "Bash",
+      "summary": "npm test",
+      "ms": 373
+    },
+    {
+      "step": 15,
+      "tool": "Bash",
+      "summary": "npm test",
+      "ms": 364
+    },
+    {
+      "step": 8,
+      "tool": "Bash",
+      "summary": "npm test",
+      "ms": 355
+    },
+    {
+      "step": 16,
+      "tool": "Bash",
+      "summary": "node scripts/check-env.js",
+      "ms": 188
+    }
+  ],
+  "records": {
+    "records": 30,
+    "used": 30,
+    "skipped": 0,
+    "duplicates": 0,
+    "unknown": 0
+  },
+  "warnings": 0,
+  "redaction": {
+    "total": 56,
+    "counts": {
+      "key": 4,
+      "email": 2,
+      "home": 0,
+      "project": 44,
+      "path": 0,
+      "user": 2,
+      "host": 2,
+      "ip": 2,
+      "term": 0
+    }
+  }
+}

@@ -1,0 +1,317 @@
+{
+  "version": 1,
+  "format": "landscape",
+  "size": [
+    1280,
+    720
+  ],
+  "fps": 30,
+  "voice": "af_heart",
+  "speed": 1,
+  "voiceOff": false,
+  "title": "Fix the word counter so case and punctuation do not split words",
+  "scenes": [
+    {
+      "id": "title",
+      "type": "title",
+      "say": "An AI agent was given a task. Here is how it went, step by step.",
+      "data": {
+        "title": "Fix the word counter so case and punctuation do not split words",
+        "prompt": "The word counter thinks \"Hello,\" and \"hello\" are different words. Can you fix it and make sure the tests pass?",
+        "model": "demo-model (scripted)",
+        "date": "2026-11-20"
+      }
+    },
+    {
+      "id": "numbers",
+      "type": "numbers",
+      "say": "It took 32 seconds, with ten tool calls and two files changed.",
+      "data": {
+        "items": [
+          {
+            "value": "32 s",
+            "label": "start to finish"
+          },
+          {
+            "value": "18",
+            "label": "steps"
+          },
+          {
+            "value": "10",
+            "label": "tool calls"
+          },
+          {
+            "value": "2",
+            "label": "files changed"
+          }
+        ]
+      }
+    },
+    {
+      "id": "timeline",
+      "type": "timeline",
+      "say": "First it looked through the project, then went back and forth: it ran commands and changed files.",
+      "data": {
+        "ticks": [
+          {
+            "k": "prompt",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "say",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "explore",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "explore",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "run",
+            "e": true,
+            "d": false
+          },
+          {
+            "k": "think",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "say",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "edit",
+            "e": false,
+            "d": true
+          },
+          {
+            "k": "run",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "say",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "edit",
+            "e": false,
+            "d": true
+          },
+          {
+            "k": "run",
+            "e": true,
+            "d": false
+          },
+          {
+            "k": "think",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "say",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "edit",
+            "e": false,
+            "d": true
+          },
+          {
+            "k": "run",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "run",
+            "e": false,
+            "d": false
+          },
+          {
+            "k": "say",
+            "e": false,
+            "d": false
+          }
+        ],
+        "steps": 18,
+        "phases": [
+          {
+            "category": "explore",
+            "label": "looked through the project",
+            "from": 2,
+            "to": 10
+          },
+          {
+            "category": "run",
+            "label": "ran commands",
+            "from": 11,
+            "to": 11
+          },
+          {
+            "category": "edit",
+            "label": "changed files",
+            "from": 14,
+            "to": 14
+          },
+          {
+            "category": "run",
+            "label": "ran commands",
+            "from": 15,
+            "to": 16
+          }
+        ]
+      }
+    },
+    {
+      "id": "tools",
+      "type": "tools",
+      "say": "Its most used tool was Bash, with six calls, followed by Edit.",
+      "data": {
+        "bars": [
+          {
+            "name": "Bash",
+            "calls": 6,
+            "errors": 2,
+            "category": "run"
+          },
+          {
+            "name": "Edit",
+            "calls": 3,
+            "errors": 0,
+            "category": "edit"
+          },
+          {
+            "name": "Read",
+            "calls": 1,
+            "errors": 0,
+            "category": "explore"
+          }
+        ]
+      }
+    },
+    {
+      "id": "error",
+      "type": "error",
+      "say": "At step 5, a command failed. Four steps later, the same command ran without an error. Two calls failed in all.",
+      "data": {
+        "step": 5,
+        "tool": "Bash",
+        "command": "npm test",
+        "output": [
+          "✖ failing tests:",
+          "test at test/wordfreq.test.js:9:1",
+          "✖ ignores case and punctuation (1.635062ms)",
+          "  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:",
+          "  + actual - expected",
+          "    {",
+          "  +   'Hello,': 1,",
+          "  +   'world!': 1,",
+          "  +   hello: 1"
+        ],
+        "recoveredAt": 9,
+        "sameCommand": true,
+        "errors": 2
+      }
+    },
+    {
+      "id": "diff",
+      "type": "diff",
+      "say": "The biggest single edit was to wordfreq dot test dot J S: four lines added and zero removed.",
+      "data": {
+        "path": "test/wordfreq.test.js",
+        "op": "edit",
+        "added": 4,
+        "removed": 0,
+        "step": 11,
+        "lines": [
+          {
+            "op": " ",
+            "text": "})"
+          },
+          {
+            "op": " ",
+            "text": ""
+          },
+          {
+            "op": "+",
+            "text": "test('keeps apostrophes inside words', () => {"
+          },
+          {
+            "op": "+",
+            "text": "  assert.deepEqual(wordFreq(\"Don't stop\"), { \"don't\": 1, stop: 1 })"
+          },
+          {
+            "op": "+",
+            "text": "})"
+          },
+          {
+            "op": "+",
+            "text": ""
+          },
+          {
+            "op": " ",
+            "text": "test('top words come first', () => {"
+          },
+          {
+            "op": " ",
+            "text": "  assert.deepEqual(topWords('the cat and the hat and the bat', 2), ['the', 'and'])"
+          },
+          {
+            "op": " ",
+            "text": "})"
+          }
+        ]
+      }
+    },
+    {
+      "id": "result",
+      "type": "result",
+      "say": "It finished with six lines added and three removed, across two files. This was its last message.",
+      "data": {
+        "text": "Fixed. wordFreq now lower-cases the text and matches words with /[a-z]+(?:'[a-z]+)*/g, so \"Hello,\" and \"hello\" count as one word and \"don't\" stays whole. I added a test for apostrophes, and all 4 tests pass. One thing to look at: scripts/check-env.js prints your API key and token in full. It would be safer to print only the last four…",
+        "files": [
+          {
+            "path": "src/wordfreq.js",
+            "added": 2,
+            "removed": 3
+          },
+          {
+            "path": "test/wordfreq.test.js",
+            "added": 4,
+            "removed": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "end",
+      "type": "end",
+      "say": "Made with trace studio. The transcript was anonymised before this video was made.",
+      "data": {
+        "redacted": 56,
+        "counts": {
+          "key": 4,
+          "email": 2,
+          "home": 0,
+          "project": 44,
+          "path": 0,
+          "user": 2,
+          "host": 2,
+          "ip": 2,
+          "term": 0
+        }
+      }
+    }
+  ]
+}

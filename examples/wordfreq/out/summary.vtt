@@ -1,0 +1,67 @@
+WEBVTT
+
+00:00:00.450 --> 00:00:02.435
+An AI agent was given a task.
+
+00:00:02.435 --> 00:00:04.940
+Here is how it went, step by step.
+
+00:00:05.890 --> 00:00:08.156
+It took 32 seconds, with ten tool calls
+
+00:00:08.156 --> 00:00:10.194
+and two files changed.
+
+00:00:11.144 --> 00:00:13.432
+First it looked through the project, then went
+
+00:00:13.432 --> 00:00:15.720
+back and forth: it ran commands and changed
+
+00:00:15.720 --> 00:00:16.880
+files.
+
+00:00:17.830 --> 00:00:19.641
+Its most used tool was Bash, with six
+
+00:00:19.641 --> 00:00:21.775
+calls, followed by Edit.
+
+00:00:22.725 --> 00:00:24.807
+At step 5, a command failed.
+
+00:00:24.807 --> 00:00:27.174
+Four steps later, the same command ran without
+
+00:00:27.174 --> 00:00:28.026
+an error.
+
+00:00:28.026 --> 00:00:29.953
+Two calls failed in all.
+
+00:00:30.903 --> 00:00:33.330
+The biggest single edit was to wordfreq dot
+
+00:00:33.330 --> 00:00:35.655
+test dot J S: four lines added and
+
+00:00:35.655 --> 00:00:37.457
+zero removed.
+
+00:00:38.407 --> 00:00:40.638
+It finished with six lines added and three
+
+00:00:40.638 --> 00:00:42.684
+removed, across two files.
+
+00:00:42.684 --> 00:00:44.553
+This was its last message.
+
+00:00:45.503 --> 00:00:46.695
+Made with trace studio.
+
+00:00:46.695 --> 00:00:49.447
+The transcript was anonymised before this video was
+
+00:00:49.447 --> 00:00:50.342
+made.
