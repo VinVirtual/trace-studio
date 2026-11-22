@@ -65,8 +65,8 @@
     "users": 2,
     "hostnames": 1,
     "terms": 0,
-    "allow": 0,
-    "envSecrets": 1,
+    "allow": 1,
+    "envSecrets": 3,
     "keepPaths": false,
     "keepIps": false
   },

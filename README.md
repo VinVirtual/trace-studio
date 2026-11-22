@@ -24,8 +24,10 @@ The session is **fictional and scripted**. No model was called. [`make-session.m
 
 ```bash
 node examples/wordfreq/make-session.mjs            # writes examples/wordfreq/session.jsonl
-./trace-studio build examples/wordfreq/session.jsonl --out examples/wordfreq/out
+./trace-studio build examples/wordfreq/session.jsonl --out examples/wordfreq/out --allow wordfreq
 ```
+
+By default the project's folder name is hidden everywhere, because it often names a client. Here it is the name of the code being fixed (`wordFreq`), so the example keeps it with `--allow wordfreq`; without that, 49 more words are replaced.
 
 On this machine (16 cores, no GPU) the build took about 27 seconds: 8 scenes of narration, then 1,549 frames drawn in three browser pages in 12 seconds.
 
@@ -67,7 +69,7 @@ Other commands: `html`, `stats`, `story`, `video` (one output each), `redact` (a
 5. **Replay page.** The styles, the script, one display font and the data go into one HTML file. The data sits in a `<script type="application/json">` block with `<`, `>` and `&` escaped, and the page builds every element with `textContent`, so a tool output that contains `<script>` shows as text. A content security policy allows only the page's own script and style (by hash) and blocks all network access.
 6. **Story.** Scenes chosen from what the run contains (title, numbers, timeline of phases, tools, the first failure, the biggest edit, the end result) with one narration line each, filled in from counted facts.
 7. **Video.** Kokoro speaks each line; the scene lengths follow the voice. A canvas page draws each frame as a pure function of time, three pages draw in parallel, and ffmpeg encodes H.264 with AAC audio, a quiet pad under the voice, a poster and WebVTT captions.
-8. **Last check.** Every text file is scanned with the same patterns (plus this machine's user and host names and your terms) before it is written; if anything is found, nothing is written. `video` scans the story before drawing, because a story may have been edited by hand. The MP4 and the poster are drawn only from the scanned story; they are not scanned themselves.
+8. **Last check.** Every text output is scanned before any is written: the same patterns again (after undoing JSON escapes, twice for JSON inside JSON), plus looser checks of its own (long random-looking strings near secret words, any `-----BEGIN` block that is not public, credentials in URLs). If anything is found, nothing is written. Outputs of an earlier run in the same folder are removed, files are written through a temporary name and renamed, and an output path that is a symbolic link is refused. `video` scans the story before drawing, because a story may have been edited by hand. The MP4 and the poster are drawn only from the scanned story; they are not scanned themselves.
 
 ### Inputs
 
@@ -80,25 +82,29 @@ Other commands: `html`, `stats`, `story`, `video` (one output each), `redact` (a
 
 ### What is replaced
 
+Invisible characters (zero-width spaces, soft hyphens) are removed first, so they cannot split a key.
+
 | Kind | Examples | Becomes |
 |---|---|---|
-| keys and tokens | `sk-…`, `AKIA…`, `aws_secret_access_key = …`, `ghp_…`, `github_pat_…`, `xoxb-…`, `AIza…`, Stripe, Hugging Face, npm, GitLab, JWTs, private key blocks, `Bearer …`, `password=…`, `user:pass@` in URLs, values of secret-named environment variables | `[redacted-key]` |
-| emails | `dana@example.com` | `[redacted-email]` |
+| keys and tokens | `sk-…`, Stripe `sk_`/`rk_`/`whsec_`, `AKIA…`, `ghp_…`, `github_pat_…`, GitLab, Slack tokens and webhook URLs, Discord webhooks, Google, Hugging Face, npm, SendGrid, Twilio, Supabase, DigitalOcean, JWTs, PEM/OpenSSH/PGP private key blocks, keys wrapped over lines, Azure `AccountKey=`, `Bearer …`, `Cookie:`/`Set-Cookie:` and `curl -b`, `--password x`, `mysql -px`, `curl -u user:pass`, `scheme://user:pass@` (also `redis://:pass@`), values of secret-named environment variables of this shell | `[redacted-key]` |
+| secret-named values | any `NAME=value` or `name: value` whose name contains password, pwd, secret, token, api key, private key, access key, credential, auth or ends in `_KEY` (`DB_PASSWORD`, `SECRET_KEY_BASE`, `X-Api-Key`, `_authToken`). Password names: any value of 3+ characters. Others: values that look like secrets (digits, mixed case, symbols or length) | `[redacted-key]` |
+| emails | `dana@example.com`, `"a b"@example.com`, `bob@bücher.de`, `bob%40example.com`, `bob\u0040…`, full-width `＠` | `[redacted-email]` |
 | project folder | the session's working folder | `<project>` (paths inside it are shown relative) |
-| home folders | `/home/x`, `/Users/x`, `C:\Users\x`, `/root` | `~` |
-| other absolute paths | under `/tmp`, `/var`, `/opt`, `/mnt`, `/srv`, `/data`, … | `/…/last-part` |
-| user and host | this machine's user name and host name, user names seen in home folders in the log (`/home/alice/...` also replaces `alice` elsewhere), `me@box:~$` prompts, `*.local`, `*.internal`, `*.lan`, `*.corp` | `[redacted-user]`, `[redacted-host]` |
-| IP addresses | IPv4 except `127.0.0.1` and `0.0.0.0` | `[redacted-ip]` |
-| your words | every `--term` | `[redacted]` |
+| project name | the folder's name and the folders between it and home, anywhere (`git clone …/acme-portal.git`) | `[redacted]` (`--allow NAME` keeps one; `--keep-project-name` keeps all) |
+| home folders | `/home/x`, `/Users/x`, `/Users/Bob Smith/`, `/Volumes/Disk/Users/x`, `/mnt/c/Users/x`, `C:\Users\x`, `C:\\Users\\x`, `/root` | `~` |
+| other paths | UNC paths (`\\server\share`, `//server/share`); absolute paths under `/tmp`, `/var`, `/opt`, `/mnt`, `/srv`, `/data`, … | `\\[redacted-host]\…\last`, `/…/last-part` |
+| users and hosts | this machine's user and host names, user names seen in any home folder in the log, `me@box:~$` prompts, `ssh user@host` targets, `*.local`, `*.internal`, `*.lan`, `*.corp`. Names of 4+ characters are also found inside longer words (`casey_test`, `caseybox2`) | `[redacted-user]`, `[redacted-host]` |
+| network addresses | IPv4 except `127.0.0.1` and `0.0.0.0`, IPv6, MAC addresses | `[redacted-ip]` |
+| your words | every `--term`, anywhere in a word, any case (terms under 4 characters as whole words) | `[redacted]` |
 
-System paths (`/usr`, `/bin`, `/etc`, `/dev`) and URLs are kept. `--allow` keeps a value; `--keep-paths` and `--keep-ips` switch those kinds off.
+System paths (`/usr`, `/bin`, `/etc`, `/dev`), URLs and code such as `password = getPassword()` are kept. `--allow` keeps a value; `--keep-paths` and `--keep-ips` switch those kinds off.
 
 ## Limits
 
 Read these before you share anything.
 
-- **The anonymiser matches shapes, not meaning.** It cannot know that "Falcon" is a secret project, that a sentence describes a client, or that a pasted document is confidential. List such words with `--term`, and read the page before sharing it.
-- **Unusual secrets slip through.** Host names on ordinary public domains (`db.example.com`) and IPv6 addresses are kept. A password in a sentence, a key in a format not listed above, a private key without its header line, base64-encoded credentials. The scan at the end uses the same patterns, so it cannot catch what they miss.
+- **The anonymiser matches shapes, not meaning.** It is cautious on purpose: user and project names are replaced inside other words too, so a user called `mark` also turns `markdown` into `[redacted-user]down` (names under 4 characters are matched as whole words only). It cannot know that "Falcon" is a secret project, that a sentence describes a client, or that a pasted document is confidential. List such words with `--term`, and read the page before sharing it.
+- **Unusual secrets slip through.** Host names on ordinary public domains (`db.example.com`) are kept. A password in a sentence with no secret word near it, a key in a format not listed above, a private key without its header line, base64-encoded credentials. The scan at the end adds a few looser checks, but it mostly reruns the same patterns, so it misses most of what they miss.
 - **The narration is filled in from counts, not understood.** It says "a command failed" and "the same command ran without an error four steps later"; it does not know why. It never says what the task was in its own words: the title scene shows the person's first message instead. Edit `story.json` if you want more.
 - **"Biggest edit" means most lines changed**, which is not always the most important change.
 - **Times come from the log.** Wall time includes every pause, even days between a session and its resumption (`activeMs` caps idle gaps at 5 minutes). A tool's duration is the gap between its call and its result being written.
@@ -111,10 +117,10 @@ Read these before you share anything.
 ## Development
 
 ```bash
-./trace-studio test     # 93 tests with node --test
+./trace-studio test     # 111 tests with node --test
 ```
 
-The tests cover the anonymiser (every key format listed above, emails, home folders on three systems, paths, user and host names, IPs, terms, the allow list, hostile input that would make slow regular expressions hang), the parser (Claude Code records, Anthropic and OpenAI shapes, malformed and truncated lines, duplicates, orphaned results, usage counting, every kind of edit), diffs, the page (script injection in tool output, the security policy, no network loads, and in a real browser when Playwright is present: payloads show as text, nothing runs, the player moves), stats, the story and video timing, the command line in throwaway folders, and a 30,000-record session. The browser test is skipped on GitHub's runner, which has no Playwright; nothing else needs ffmpeg, a browser or Kokoro.
+The tests cover the anonymiser (every key format listed above, emails, home folders on three systems, paths, user and host names, IPs, terms, the allow list, hostile input that would make slow regular expressions hang, and one regression test for each finding of an independent security review), the parser (Claude Code records, Anthropic and OpenAI shapes, malformed and truncated lines, duplicates, orphaned results, usage counting, every kind of edit), diffs, the page (script injection in tool output, the security policy, no network loads, and in a real browser when Playwright is present: payloads show as text, nothing runs, the player moves), stats, the story and video timing, the command line in throwaway folders, and a 30,000-record session. The browser test is skipped on GitHub's runner, which has no Playwright; nothing else needs ffmpeg, a browser or Kokoro.
 
 ## Licence
 

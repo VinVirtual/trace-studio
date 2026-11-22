@@ -5,6 +5,7 @@ import { analyse } from '../engine/lib/pipeline.mjs'
 import { renderReplay } from '../engine/lib/html.mjs'
 import { buildStory } from '../engine/lib/story.mjs'
 import { makeRedactor } from '../engine/lib/redact.mjs'
+import { findLeaks } from '../engine/lib/scan.mjs'
 import { cc, jsonl } from './helpers.mjs'
 
 function bigSession(turns) {
@@ -45,11 +46,14 @@ test('one enormous tool output is cut, and the page stays small', () => {
   assert.ok(html.length < 200_000, `page is ${html.length} bytes`)
 })
 
-test('the anonymiser stays linear on hostile input (no slow regular expressions)', () => {
+test('the anonymiser and the scan stay linear on hostile input (no slow regular expressions)', () => {
   const r = makeRedactor({ machine: false, envSecrets: false, home: '/home/casey', user: 'casey' })
-  for (const s of ['x'.repeat(2e6), 'ab.'.repeat(7e5), 'a@'.repeat(1e6), 'a-'.repeat(1e6), '/tmp'.repeat(5e5), '1.'.repeat(1e6), 'sk-'.repeat(7e5), 'password='.repeat(2e5), 'x x '.repeat(5e5), 'a:/'.repeat(5e5), 'C:\\a'.repeat(5e5)]) {
+  for (const s of ['x'.repeat(2e6), 'ab.'.repeat(7e5), 'a@'.repeat(1e6), 'a-'.repeat(1e6), '/tmp'.repeat(5e5), '1.'.repeat(1e6), 'sk-'.repeat(7e5), 'password='.repeat(2e5), 'x x '.repeat(5e5), 'a:/'.repeat(5e5), 'C:\\a'.repeat(5e5),
+    'a:'.repeat(5e5), 'aa:'.repeat(4e5), '/Users/a '.repeat(2e5), '\\\\a\\'.repeat(3e5), 'ssh a'.repeat(3e5), 'token '.repeat(3e5), 'x-api-key: '.repeat(1e5),
+    'mysql '.repeat(3e5), '-----BEGIN '.repeat(1e5), 'sk-' + 'a'.repeat(20) + '\n' + 'b1'.repeat(5e5), 'C:\\Users\\a b '.repeat(1e5), '"a"@'.repeat(2e5), 'a%40'.repeat(3e5)]) {
     const t0 = performance.now()
     r.text(s)
+    findLeaks(s, { machine: false })
     assert.ok(performance.now() - t0 < 3000, `${JSON.stringify(s.slice(0, 6))}... took ${(performance.now() - t0).toFixed(0)} ms`)
   }
 })

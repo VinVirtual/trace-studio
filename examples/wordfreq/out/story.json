@@ -211,7 +211,7 @@
         "output": [
           "✖ failing tests:",
           "test at test/wordfreq.test.js:9:1",
-          "✖ ignores case and punctuation (1.635062ms)",
+          "✖ ignores case and punctuation (2.523912ms)",
           "  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:",
           "  + actual - expected",
           "    {",

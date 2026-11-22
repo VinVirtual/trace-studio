@@ -5,9 +5,10 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs'
 import { join, dirname, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ENGINE, SKILL } from './paths.mjs'
-import { findFF, findPython, launchBrowser } from './env.mjs'
+import { findFF, findPython, launchBrowser, PY_ISOLATED } from './env.mjs'
 import { lintStory, FORMATS } from './story.mjs'
 import { scriptJson } from './html.mjs'
+import { safeWrite, moveInto, tempNext, refuseLink } from './safewrite.mjs'
 
 export const LEAD = 0.45 // seconds of picture before the voice starts in each scene
 export const TAIL = 0.8 // seconds after the voice ends
@@ -64,7 +65,7 @@ function filmPage(story, timeline) {
 }
 
 function runPython(args, log) {
-  const r = spawnSync(findPython(), [join(ENGINE, 'narrate.py'), ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  const r = spawnSync(findPython(), [...PY_ISOLATED, join(ENGINE, 'narrate.py'), ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, cwd: ENGINE })
   if (r.error) throw new Error(`could not start Python (${findPython()}): ${r.error.message}`)
   for (const line of (r.stdout || '').trim().split('\n').filter(Boolean)) log(line)
   if (r.status !== 0) throw new Error(((r.stderr || '').trim().split('\n').pop() || 'narration failed') + '\n(use --no-voice for a silent video)')
@@ -96,9 +97,9 @@ export async function renderStoryFile(storyPath, opts = {}) {
   try { story = JSON.parse(readFileSync(storyPath, 'utf8')) } catch (e) { throw new Error(`${storyPath} is not valid JSON: ${e.message}`) }
   if (opts.voice) story.voice = opts.voice
   if (opts.voiceOff) story.voiceOff = true
-  if (opts.format) { story.format = opts.format; story.size = FORMATS[opts.format] }
+  if (opts.format) story.format = opts.format
   if (opts.fps) story.fps = opts.fps
-  story.size = FORMATS[story.format] || story.size || FORMATS.landscape
+  story.size = Object.hasOwn(FORMATS, story.format) ? FORMATS[story.format] : FORMATS.landscape
   const { errors, warnings } = lintStory(story)
   for (const w of warnings) log(`story: ${w}`)
   if (errors.length) throw new Error(`the story has problems:\n  ${errors.join('\n  ')}`)
@@ -125,17 +126,19 @@ export async function renderStoryFile(storyPath, opts = {}) {
   const fps = timeline.fps, n = Math.round(timeline.total * fps)
   const workers = Math.max(1, Math.min(opts.workers || 3, n))
   const FF = findFF()
+  refuseLink(out)
+  const partial = tempNext(out)
   const { browser, pages } = await openPages(htmlFile, workers, story.size)
   const t0 = Date.now()
   try {
     // poster: the title scene once its text has settled
     const posterT = Math.min(timeline.scenes[0].end - 0.4, 2.6)
     const poster = join(dir, `${stem}-poster.jpg`)
-    writeFileSync(poster, decode(await pages[0].evaluate((t) => window.frame(t, 0.9), posterT)))
+    safeWrite(poster, decode(await pages[0].evaluate((t) => window.frame(t, 0.9), posterT)))
 
     const audio = voice ? ['-i', join(work, 'mix.wav')] : ['-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono']
     const ff = spawn(FF, ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-c:v', 'mjpeg', '-framerate', String(fps), '-i', '-', ...audio,
-      '-c:v', 'libx264', '-preset', 'medium', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', out], { stdio: ['pipe', 'inherit', 'inherit'] })
+      '-c:v', 'libx264', '-preset', 'medium', '-crf', '21', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-shortest', '-movflags', '+faststart', '-f', 'mp4', partial], { stdio: ['pipe', 'inherit', 'inherit'] })
     let failed = null
     const done = new Promise((resolve) => ff.on('close', (code) => { if (code) failed = failed || new Error(`ffmpeg exited with code ${code}`); resolve() }))
     ff.on('error', (e) => { failed = new Error(`could not start ffmpeg (${FF}): ${e.message}`) })
@@ -164,19 +167,21 @@ export async function renderStoryFile(storyPath, opts = {}) {
     await done
     if (failed) throw failed
     const vtt = join(dir, `${stem}.vtt`)
-    writeFileSync(vtt, toVtt(timeline))
+    moveInto(partial, out)
+    safeWrite(vtt, toVtt(timeline))
     log(`rendered ${n} frames in ${((Date.now() - t0) / 1000).toFixed(0)} s`)
     if (!opts.keepBuild) rmSync(work, { recursive: true, force: true })
     return { mp4: out, poster, vtt, timeline }
   } finally {
     await browser.close()
+    rmSync(partial, { force: true })
   }
 }
 
 /** One still frame as a JPEG file (for checking a scene). */
 export async function renderStill(storyPath, t, file) {
   const story = JSON.parse(readFileSync(storyPath, 'utf8'))
-  story.size = FORMATS[story.format] || FORMATS.landscape
+  story.size = Object.hasOwn(FORMATS, story.format) ? FORMATS[story.format] : FORMATS.landscape
   const timeline = makeTimeline(story, null)
   const htmlFile = file + '.html'
   writeFileSync(htmlFile, filmPage(story, timeline))

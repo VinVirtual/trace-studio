@@ -1,6 +1,6 @@
 ---
 name: trace-studio
-description: Turn an AI agent run into a replay you can watch and share. Reads a Claude Code session transcript (~/.claude/projects/*/*.jsonl) or an Anthropic or OpenAI message log, anonymises it first (absolute paths, the home folder, user and host names, emails, API keys and tokens, IP addresses, plus any words you list), then makes a single-file HTML timeline replay (scrubbable, play button, tool calls with collapsed outputs, inline diffs of every file edit, works offline), a 30 to 60 second narrated summary video of how the agent solved the task, and a stats JSON (time, tool calls, failures, files and lines changed, tokens). Use whenever the user wants to replay, share, show, review, debug, document or demo an agent session or a coding-assistant run; asks "what did the agent do", "share this Claude Code session", "turn my transcript into a video", "visualise the tool calls", "make a replay", "export the session as HTML", "anonymise this transcript", "session stats", "how many tokens or tool calls did it use"; or wants a post-mortem of a run that went wrong.
+description: Turn an AI agent run into a replay you can watch and share. Reads a Claude Code session (~/.claude/projects/*/*.jsonl) or an Anthropic or OpenAI message log, anonymises it first (paths, home folders, user, host and project names, emails, keys and tokens, network addresses, plus words you list), then makes a single-file offline HTML replay (play button, scrubber, tool calls with folded outputs, inline diffs), a 30 to 60 second narrated summary video, and a stats JSON (time, tool calls, failures, files and lines changed, tokens). Use whenever the user wants to replay, share, review, debug, document or demo an agent or coding-assistant session; asks "what did the agent do", "share this Claude Code session", "turn my transcript into a video", "visualise the tool calls", "export the session as HTML", "anonymise this transcript", "session stats", "how many tool calls did it use"; or wants a post-mortem of a run.
 ---
 
 # trace-studio
@@ -11,7 +11,7 @@ Skill folder: `~/.claude/skills/trace-studio/` (written `$T` below). Every comma
 
 ## Workflow
 
-1. **Find the transcript.** `$T/trace-studio list` shows Claude Code sessions on this machine, newest first (date, size, path). `latest` means the newest one, which is usually the session you are in right now; ask the user which run they mean if it is not obvious. Other inputs: an Anthropic Messages log, an OpenAI Chat Completions log or a list of OpenAI Responses items, as `.json` or `.jsonl` (README.md, "Inputs").
+1. **Find the transcript.** `$T/trace-studio list` shows Claude Code sessions on this machine, newest first (date, size, path). `latest` means the newest one, which is usually the session you are in right now. It prints the path it picked: tell the user which session that is and confirm it is the one they mean before building. Other inputs: an Anthropic Messages log, an OpenAI Chat Completions log or a list of OpenAI Responses items, as `.json` or `.jsonl` (README.md, "Inputs").
 2. **Ask about private words.** The anonymiser catches things with a recognisable shape. It cannot know a client's name, a product code name or a colleague's name. Ask: "Are there names of clients, products or people in this session that must not appear?" Pass each with `--term NAME` (or `redact.terms` in a config file). Keep a value with `--allow TEXT`.
 3. **Build:** `$T/trace-studio build <transcript> --out <dir> [--term X]...`. It writes `redaction.json`, `stats.json`, `replay.html`, `story.json`, then renders `summary.mp4` with a poster and captions. Add `--no-video` for the page and stats only (seconds, no extra tools). Every output is scanned for anything private before it is written; if the scan finds something, nothing is written and the command says what kind of item it was.
 4. **Look at what you made before handing it over.**
@@ -39,7 +39,7 @@ Always tell the user: **"The anonymiser removes what has a recognisable shape. R
 | `check` | what is installed and how to fix what is missing |
 | `test` | self-tests |
 
-Options: `--config FILE`, `--allow TEXT`, `--term TEXT` (both repeatable), `--keep-paths`, `--keep-ips`, `--thinking`, `--max-output N` (characters kept per tool output, default 12000), `--title TEXT`, `--no-fonts`, `--voice NAME` (Kokoro voice, default `af_heart`), `--no-voice` (silent, timed by word count), `--format landscape|square|vertical`, `--force` (write even when the final scan flags something; only when the user has looked and agrees).
+Options: `--config FILE`, `--allow TEXT`, `--term TEXT` (both repeatable), `--keep-paths`, `--keep-ips`, `--keep-project-name`, `--thinking`, `--max-output N` (characters kept per tool output, default 12000), `--title TEXT`, `--no-fonts`, `--voice NAME` (Kokoro voice, default `af_heart`), `--no-voice` (silent, timed by word count), `--format landscape|square|vertical`, `--force` (write even when the final scan flags something; only when the user has looked and agrees).
 
 Config file (`--config trace-studio.json`):
 
@@ -50,12 +50,23 @@ Config file (`--config trace-studio.json`):
 
 ## What the anonymiser does
 
-Replaced, in this order: values of secret-named environment variables of this shell; API keys and tokens (OpenAI and Anthropic `sk-`, AWS `AKIA`/`ASIA` ids and secret keys in assignments, GitHub `ghp_`/`gho_`/`github_pat_`, GitLab, Slack, Google, Stripe, Hugging Face, npm, JWTs, private key blocks, `Bearer` headers, `password=` style pairs (any 8+ character value after a password name), passwords in URLs); emails; shell prompts (`me@box:~$`); the project folder (shown as `<project>`, paths inside it become relative); any user's home folder (`/home/x`, `/Users/x`, `C:\Users\x`, `/root` become `~`); other absolute paths under private folders such as `/tmp`, `/var`, `/mnt`, `/opt` (shortened to `/…/file`); this machine's user name and host name, and user names seen in home folders anywhere in the log; internal host names (`.local`, `.internal`, `.lan`, `.corp`); IPv4 addresses except loopback; every `--term`. Fields that identify an account or request (account and organisation ids, request ids, thinking signatures) are dropped, and inline images are removed.
+Invisible characters (zero-width spaces, soft hyphens) are removed first, so they cannot split a key. Then, in this order:
+
+- **Keys and tokens:** values of secret-named environment variables of this shell; `sk-`, Stripe `sk_`/`rk_`/`pk_` and `whsec_`, AWS ids, GitHub, GitLab, Slack (tokens and webhook URLs), Discord webhooks, Google, Hugging Face, npm, SendGrid, Twilio, DigitalOcean, JWTs, PEM/OpenSSH/PGP private key blocks, keys wrapped over several lines, Azure `AccountKey=`/`SharedAccessKey=`/`sig=`, `Bearer`/`Basic` headers, `Cookie`/`Set-Cookie` values and `curl -b`, `--password`/`--token` style flags, `mysql -p…`, `curl -u user:pass`, passwords in URLs (also with an empty user), and any `NAME=value` or `name: value` whose name contains password, passwd, pwd, secret, token, api key, private key, access key, credential or auth (`DB_PASSWORD`, `SECRET_KEY_BASE`, `X-Api-Key`, `_authToken`). For password names any value of 3+ characters is replaced; for the others the value must look like a secret (digits, mixed case, symbols or length), so `token: expired` and `password = getPassword()` stay.
+- **Emails**, including quoted local parts, international domains, `%40`, `\u0040` and the full-width at sign.
+- **Users and hosts:** shell prompts, `ssh`/`scp`/`rsync` targets, this machine's user and host names, user names seen in any home folder in the log; names of 4+ characters are replaced inside longer words too (`casey_test`).
+- **Folders:** the project folder (shown as `<project>`), its folder name and the folders between it and home (as words anywhere: `git clone .../acme-portal.git`; keep one with `--allow NAME` or all with `--keep-project-name`), any home folder (`/home/x`, `/Users/x`, `/Users/Bob Smith/`, `/Volumes/Disk/Users/x`, `/mnt/c/Users/x`, `C:\Users\x`, double-backslash forms, `/root` become `~`), UNC paths, other absolute paths under private folders (shortened to `/…/file`).
+- **Network:** internal host names (`.local`, `.internal`, `.lan`, `.corp`), IPv4 (except loopback), IPv6 and MAC addresses.
+- **Your words:** every `--term`, anywhere in a word, any case (terms under 4 characters as whole words).
+
+Fields that identify an account or request are dropped and inline images removed. The final scan reruns these patterns on every output, plus looser checks of its own: long random-looking strings near secret words, any `-----BEGIN` block that is not public, credentials in URLs. All outputs are scanned before any is written; outputs of an earlier run in the same folder are removed, and output paths that are symbolic links are refused.
+
+**Still kept:** host names on public domains (`db.example.com`), secrets with no recognisable shape and no secret word near them, names nobody listed. Read the page before sharing.
 
 ## Troubleshooting
 
 - **"no steps found"**: the file is not a transcript the parser knows. The first lines of stderr show which lines were skipped and why.
-- **"the privacy scan still found N item(s)"**: usually an allowed value in an unusual spot, or a name the user listed. Run `scan` on the output written with `--force` into a scratch folder to see the kinds, then add `--term` or `--allow`. Never pass `--force` for a file that will be shared without the user's say-so.
+- **"the privacy scan still found private items"**: the message lists each file and the kinds found. Write with `--force` into a scratch folder, run `scan` on it to see where, then fix with `--term` or `--allow`. Never pass `--force` for a file that will be shared without the user's say-so.
 - **Video fails at "narrate"**: Kokoro is missing; run `$T/check_env.sh`, or use `--no-voice`.
 - **The run's wall time is days long**: the session was resumed later. `stats.json` also has `activeMs`, which caps each idle gap at 5 minutes.
-- **Huge sessions**: a 314 MB transcript took 35 seconds and 1.2 GB of memory here. Long outputs are cut to `--max-output` characters (head and tail kept).
+- **Huge sessions**: a 314 MB transcript took about 77 seconds and 1.4 GB of memory here. Long outputs are cut to `--max-output` characters (head and tail kept).

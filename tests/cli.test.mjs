@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync
 import { join } from 'node:path'
 import { tmpdir, homedir, userInfo, hostname } from 'node:os'
 import { SKILL } from '../engine/lib/paths.mjs'
-import { findLeaks } from '../engine/lib/redact.mjs'
+import { findLeaks, scanOutput } from '../engine/lib/scan.mjs'
 import { cc, jsonl } from './helpers.mjs'
 
 const CLI = join(SKILL, 'engine', 'cli.mjs')
@@ -26,7 +26,7 @@ test('build --no-video makes the replay, stats, redaction report and story, with
     assert.ok(red.counts.key >= 2 && red.counts.email >= 1 && red.counts.host >= 1 && red.counts.ip >= 1 && red.counts.project > 0)
     for (const f of ['replay.html', 'stats.json', 'story.json']) {
       const text = readFileSync(join(dir, f), 'utf8')
-      assert.deepEqual(findLeaks(text), [], f)
+      assert.deepEqual(scanOutput(f, text), [], f)
       for (const raw of ['dana@example.com', '/home/dana', 'devbox.internal', '10.0.4.12', 'EXAMPLEexampleEXAMPLE']) assert.ok(!text.includes(raw), `${f} contains ${raw}`)
     }
   } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -139,7 +139,7 @@ test('the shipped example files hold no private items', () => {
     if (!existsSync(p)) continue
     const text = readFileSync(p, 'utf8')
     // the example input holds made-up private items on purpose; it must hold nothing from this machine
-    if (f !== 'session.jsonl') assert.deepEqual(findLeaks(text), [], f)
+    if (f !== 'session.jsonl') assert.deepEqual(scanOutput(f, text), [], f)
     for (const word of [userInfo().username, hostname()].filter((w) => w.length >= 4 && !['runner', 'localhost'].includes(w))) assert.ok(!new RegExp(`\\b${word}\\b`, 'i').test(text), `${f} names this machine's user or host`)
     assert.ok(!text.includes(homedir()), `${f} contains this machine's home folder`)
   }

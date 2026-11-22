@@ -105,7 +105,7 @@ function diffWindow(edit, max = 14) {
  */
 export function buildStory({ trace, stats, title, video = {} }) {
   const steps = trace.steps
-  const format = FORMATS[video.format] ? video.format : 'landscape'
+  const format = Object.hasOwn(FORMATS, video.format || '') ? video.format : 'landscape'
   const scenes = []
   const heading = runTitle(trace, title)
   const prompt = steps.find((s) => s.kind === 'prompt')
@@ -182,7 +182,7 @@ export function lintStory(story) {
     else if (s.say.split(/\s+/).length > 45) warnings.push(`${where}: ${s.say.split(/\s+/).length} words is long for one scene; aim for 10 to 35`)
     if (s.data != null && typeof s.data !== 'object') errors.push(`${where}: "data" must be an object`)
   })
-  if (story.format && !FORMATS[story.format]) errors.push(`format must be one of ${Object.keys(FORMATS).join(', ')}`)
+  if (story.format && !Object.hasOwn(FORMATS, story.format)) errors.push(`format must be one of ${Object.keys(FORMATS).join(', ')}`)
   const words = story.scenes.reduce((a, s) => a + (typeof s?.say === 'string' ? s.say.split(/\s+/).length : 0), 0)
   const est = words / 2.6 + story.scenes.length * 1.2
   if (est < 25) warnings.push(`about ${Math.round(est)} s of video: shorter than the usual 30 to 60 s`)

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // trace-studio command line. `trace-studio help` lists the commands.
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve, dirname, basename } from 'node:path'
 import os from 'node:os'
 import { SKILL } from './lib/paths.mjs'
 import { analyse, loadConfig } from './lib/pipeline.mjs'
 import { renderReplay } from './lib/html.mjs'
+import { safeWrite, removeStale } from './lib/safewrite.mjs'
 import { formatMs } from './lib/stats.mjs'
-import { findLeaks, makeRedactor, findHomeUsers } from './lib/redact.mjs'
+import { makeRedactor, findHomeUsers } from './lib/redact.mjs'
+import { findLeaks, scanOutput } from './lib/scan.mjs'
 import { parseText, readTranscriptText, findProjectDirs } from './lib/load.mjs'
 
 const HELP = `trace-studio: turn an AI agent run into a replay you can watch and share.
@@ -33,6 +35,8 @@ options
   --allow TEXT       keep this text as it is (repeatable; /regex/ for a pattern)
   --term TEXT        always replace this word, such as a client or product name (repeatable)
   --keep-paths       do not shorten absolute paths     --keep-ips   do not replace IP addresses
+  --keep-project-name  do not hide the project's folder name (it is replaced everywhere by default;
+                     --allow NAME keeps one name)
   --thinking         include the model's thinking text (left out by default)
   --max-output N     characters kept from each tool output (default 12000)
   --title TEXT       title for the page and the video
@@ -48,7 +52,7 @@ const say = (m) => process.stdout.write(m + '\n')
 const warn = (m) => process.stderr.write(m + '\n')
 
 const VALUE_FLAGS = new Set(['out', 'o', 'config', 'allow', 'term', 'max-output', 'title', 'voice', 'format', 'fps', 'workers'])
-const BOOL_FLAGS = new Set(['all', 'keep-paths', 'keep-ips', 'thinking', 'no-fonts', 'no-voice', 'no-video', 'force', 'json', 'help', 'h'])
+const BOOL_FLAGS = new Set(['keep-project-name', 'all', 'keep-paths', 'keep-ips', 'thinking', 'no-fonts', 'no-voice', 'no-video', 'force', 'json', 'help', 'h'])
 export function parseArgs(argv) {
   const pos = [], flags = { allow: [], term: [] }
   for (let i = 0; i < argv.length; i++) {
@@ -81,7 +85,12 @@ function listSessions() {
 
 function inputFile(arg) {
   if (!arg) throw new UsageError('give a transcript file (or "latest")')
-  if (arg === 'latest') { const s = listSessions()[0]; if (!s) throw new Error(`no Claude Code sessions found in ${sessionsDir()}`); return s.path }
+  if (arg === 'latest') {
+    const s = listSessions()[0]
+    if (!s) throw new Error(`no Claude Code sessions found in ${sessionsDir()}`)
+    warn(`latest session: ${s.path} (${new Date(s.mtime).toISOString().slice(0, 16).replace('T', ' ')}, ${(s.size / 1024).toFixed(0)} KB)`)
+    return s.path
+  }
   const p = resolve(arg)
   if (!existsSync(p)) throw new Error(`file not found: ${arg}`)
   return p
@@ -92,6 +101,7 @@ function settings(flags) {
   const redact = { allow: [...(config.redact?.allow || []), ...flags.allow], terms: [...(config.redact?.terms || []), ...flags.term] }
   if (flags['keep-paths']) redact.keepPaths = true
   if (flags['keep-ips']) redact.keepIps = true
+  if (flags['keep-project-name']) redact.keepProjectName = true
   const opts = {}
   if (flags.thinking) opts.thinking = true
   if (flags['max-output'] != null) { const n = Number(flags['max-output']); if (!Number.isInteger(n) || n < 200) throw new UsageError('--max-output must be a whole number of at least 200'); opts.maxOutput = n }
@@ -105,23 +115,29 @@ function run(file, flags) {
   for (const w of result.warnings.slice(0, 5)) warn(`line ${w.line}: ${w.reason}`)
   if (result.warnings.length > 5) warn(`… and ${result.warnings.length - 5} more lines skipped`)
   if (!result.trace.steps.length) throw new Error('no steps found: is this a Claude Code session, or an Anthropic or OpenAI message log? (see README.md, "Inputs")')
-  s.scan = { ...s.scan, users: result.users }
+  // the project's folder names are private too, and so is a title given by hand
+  s.scan = { ...s.scan, users: result.users, terms: [...s.scan.terms, ...result.terms] }
+  if (s.title) s.title = result.redactText(s.title)
   return { ...result, s }
 }
 
-/** Write a file after the last privacy scan; refuse when it finds something, unless --force. */
-function writeChecked(path, content, flags, s) {
-  // the page's own styles and script are ours, not the transcript's: only the rest is scanned
-  const scanned = path.endsWith('.html') ? content.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<script>[\s\S]*?<\/script>/, '') : content
-  const leaks = findLeaks(scanned, s.scan)
-  if (leaks.length) {
-    const kinds = [...new Set(leaks.map((l) => l.kind))].join(', ')
-    if (!flags.force) throw new Error(`${basename(path)}: the privacy scan still found ${leaks.length} item(s) (${kinds}). Nothing was written. Add --term or --allow, or --force to write anyway.`)
-    warn(`warning: ${basename(path)} still contains ${leaks.length} item(s) the scan flags (${kinds}); written because of --force`)
+/** Scan every output; throw when any has a finding (unless --force, which only warns). */
+function scanAll(files, flags, s) {
+  const problems = []
+  for (const [path, content] of files) {
+    const leaks = scanOutput(path, content, s.scan)
+    if (leaks.length) problems.push(`${basename(path)}: ${leaks.length} item(s) (${[...new Set(leaks.map((l) => l.kind))].join(', ')})`)
   }
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, content)
-  return path
+  if (problems.length) {
+    if (!flags.force) throw new Error(`the privacy scan still found private items, so nothing was written:\n  ${problems.join('\n  ')}\nAdd --term or --allow, or --force to write anyway.`)
+    warn(`warning: written because of --force although the scan flags:\n  ${problems.join('\n  ')}`)
+  }
+}
+
+/** Scan every output first; write them only when none has a finding (or --force). Never follows links. */
+function writeChecked(files, flags, s) {
+  scanAll(files, flags, s)
+  return files.map(([path, content]) => safeWrite(path, content))
 }
 
 function summary(stats) {
@@ -153,7 +169,7 @@ async function main(argv) {
     if (!pos.length) throw new UsageError('give one or more files to scan')
     const s = settings(flags); let bad = 0
     for (const f of pos) {
-      const leaks = findLeaks(readFileSync(f, 'utf8'), s.scan)
+      const leaks = scanOutput(f, readFileSync(f, 'utf8'), s.scan)
       const kinds = {}; for (const l of leaks) kinds[l.kind] = (kinds[l.kind] || 0) + 1
       say(`${leaks.length ? 'FOUND' : 'clean'}  ${f}${leaks.length ? '  ' + JSON.stringify(kinds) : ''}`)
       if (leaks.length) bad++
@@ -168,9 +184,9 @@ async function main(argv) {
     const redactor = makeRedactor({ ...(s.config.redact || {}), ...s.redact, users, projects: [...(s.config.redact?.projects || []), ...findProjectDirs(body)] })
     const { records, warnings } = parseText(body, { redact: redactor })
     const out = flags.out ? resolve(flags.out) : file.replace(/(\.jsonl?|)$/, '.anon.jsonl')
-    writeChecked(out, records.map((r) => JSON.stringify(r.value)).join('\n') + '\n', flags, s)
+    const copy = records.map((r) => JSON.stringify(r.value)).join('\n') + '\n'
     const report = { ...redactor.report(), skippedLines: warnings }
-    writeChecked(out.replace(/\.jsonl$/, '') + '.redaction.json', JSON.stringify(report, null, 2) + '\n', flags, s)
+    writeChecked([[out, copy], [out.replace(/\.jsonl$/, '') + '.redaction.json', JSON.stringify(report, null, 2) + '\n']], flags, s)
     say(`${out}\nreplaced ${report.total} item(s): ${Object.entries(report.counts).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(', ') || 'nothing'}; ${warnings.length} line(s) skipped`)
     say('Patterns catch what has a recognisable shape. Read the copy before you share it.')
     return EXIT.ok
@@ -183,7 +199,7 @@ async function main(argv) {
     else if (cmd === 'html') { content = renderReplay({ trace: r.trace, stats: r.stats, redaction: r.redaction, title: r.s.title, fonts: r.s.fonts }); out = flags.out || 'replay.html' }
     else { const { buildStory } = await import('./lib/story.mjs'); content = JSON.stringify(buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } }), null, 2) + '\n'; out = flags.out || 'story.json' }
     if (!out) { process.stdout.write(content); return EXIT.ok }
-    writeChecked(resolve(out), content, flags, r.s)
+    writeChecked([[resolve(out), content]], flags, r.s)
     say(`${resolve(out)}\n${summary(r.stats)}`)
     return EXIT.ok
   }
@@ -203,13 +219,20 @@ async function main(argv) {
     const file = inputFile(pos[0])
     const dir = resolve(flags.out || 'trace-out')
     const r = run(file, flags)
-    const paths = {}
-    paths.redaction = writeChecked(join(dir, 'redaction.json'), JSON.stringify({ ...r.redaction, skippedLines: r.warnings }, null, 2) + '\n', flags, r.s)
-    paths.stats = writeChecked(join(dir, 'stats.json'), JSON.stringify(r.stats, null, 2) + '\n', flags, r.s)
-    paths.html = writeChecked(join(dir, 'replay.html'), renderReplay({ trace: r.trace, stats: r.stats, redaction: r.redaction, title: r.s.title, fonts: r.s.fonts }), flags, r.s)
     const { buildStory } = await import('./lib/story.mjs')
     const story = buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } })
-    paths.story = writeChecked(join(dir, 'story.json'), JSON.stringify(story, null, 2) + '\n', flags, r.s)
+    const files = [
+      ['redaction', join(dir, 'redaction.json'), JSON.stringify({ ...r.redaction, skippedLines: r.warnings }, null, 2) + '\n'],
+      ['stats', join(dir, 'stats.json'), JSON.stringify(r.stats, null, 2) + '\n'],
+      ['html', join(dir, 'replay.html'), renderReplay({ trace: r.trace, stats: r.stats, redaction: r.redaction, title: r.s.title, fonts: r.s.fonts })],
+      ['story', join(dir, 'story.json'), JSON.stringify(story, null, 2) + '\n'],
+    ]
+    // every output is scanned before any is written, and outputs of an earlier run are removed
+    const scanned = files.map(([, p, c]) => [p, c])
+    scanAll(scanned, flags, r.s)
+    removeStale([...files.map(([, p]) => p), ...['summary.mp4', 'summary-poster.jpg', 'summary.vtt'].map((f) => join(dir, f))])
+    for (const [p, c] of scanned) safeWrite(p, c)
+    const paths = Object.fromEntries(files.map(([k, p]) => [k, p]))
     say(summary(r.stats))
     if (!flags['no-video']) {
       const { renderStoryFile } = await import('./lib/video.mjs')

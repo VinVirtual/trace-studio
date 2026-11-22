@@ -1,7 +1,8 @@
 // The anonymiser: everything private must be gone before any output is made.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { makeRedactor, findLeaks, allowTester, envSecrets, findHomeUsers, MARK } from '../engine/lib/redact.mjs'
+import { findLeaks } from '../engine/lib/scan.mjs'
+import { makeRedactor, allowTester, envSecrets, findHomeUsers, MARK } from '../engine/lib/redact.mjs'
 import { testRedactor } from './helpers.mjs'
 
 // Made-up values in the shape of real credentials, built in pieces so no scanner mistakes this file for a leak.
@@ -113,7 +114,8 @@ test('the user name, the host name and shell prompts are replaced', () => {
   assert.equal(r.text('logged in as casey on casey-laptop'), `logged in as ${MARK.user} on ${MARK.host}`)
   assert.equal(r.text('pat@buildbox:~/src$ make'), `${MARK.user}@${MARK.host}:~/src$ make`)
   assert.equal(r.text('Casey said hi'), `${MARK.user} said hi`)
-  assert.equal(r.text('caseys and lowercasey stay'), 'caseys and lowercasey stay')
+  // names of 4+ characters are found inside longer words too (casey_test, caseyBox)
+  assert.equal(r.text('casey_test and CaseyBox'), `${MARK.user}_test and ${MARK.user}Box`)
 })
 
 test('internal host names and IP addresses are replaced; loopback and versions are kept', () => {
@@ -130,9 +132,10 @@ test('common user and host names are not treated as private words', () => {
   assert.equal(r.text('the test runner on localhost'), 'the test runner on localhost')
 })
 
-test('listed terms are always replaced, whole words only, any case', () => {
-  const r = testRedactor({ terms: ['Acme Corp', 'Zephyr'] })
-  assert.equal(r.text('ACME CORP asked about zephyr and Zephyrus'), `${MARK.term} asked about ${MARK.term} and Zephyrus`)
+test('listed terms are replaced anywhere, in any case; short terms only as whole words', () => {
+  const r = testRedactor({ terms: ['Acme Corp', 'Zephyr', 'qx'] })
+  assert.equal(r.text('ACME CORP asked about zephyr and Zephyrus'), `${MARK.term} asked about ${MARK.term} and ${MARK.term}us`)
+  assert.equal(r.text('qx and qxz'), `${MARK.term} and qxz`)
 })
 
 test('the allow list keeps exact strings and /regex/ matches', () => {

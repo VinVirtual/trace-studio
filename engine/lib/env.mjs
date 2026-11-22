@@ -3,11 +3,14 @@
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 export const KOKORO_HOME = process.env.KOKORO_HOME || join(homedir(), 'kokoro')
-const quiet = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000 }).trim()
+// every helper runs from the system's temp folder, so a planted json.py or numpy/ in the current folder is never imported
+const quiet = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 20000, cwd: tmpdir() }).trim()
+/** Python flags: -I isolates it from the current folder, PYTHONPATH and user site packages. */
+export const PY_ISOLATED = ['-I']
 const which = (name) => { try { return quiet('which', [name]).split('\n')[0] || null } catch { return null } }
 
 /** Python that has kokoro-onnx: $TRACE_STUDIO_PYTHON, the venv in $KOKORO_HOME, else python3. */
@@ -22,7 +25,7 @@ export function findFF() {
   if (process.env.FF) return process.env.FF
   const onPath = which('ffmpeg')
   if (onPath) return onPath
-  try { return quiet(findPython(), ['-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())']) } catch {}
+  try { return quiet(findPython(), [...PY_ISOLATED, '-c', 'import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())']) } catch {}
   throw new Error('ffmpeg not found. Install ffmpeg, or `pip install imageio-ffmpeg` into the Kokoro venv, or set FF=/path/to/ffmpeg')
 }
 
@@ -67,7 +70,7 @@ export async function checkEnv({ log = console.log } = {}) {
   try { const { from } = findPlaywright(); good(`playwright (${from})`) } catch (e) { miss('playwright (for the video)', e.message) }
   try { const b = await launchBrowser(); good(`browser starts (${b.version()})`); await b.close() } catch (e) { miss('a browser (for the video)', e.message.split('\n').slice(-1)[0]) }
   const py = findPython()
-  try { quiet(py, ['-c', 'import kokoro_onnx, soundfile, numpy']); good(`python with kokoro-onnx (${py})`) } catch { miss('python with kokoro-onnx, soundfile and numpy (for the narration; --no-voice works without)', `python3 -m venv "${join(KOKORO_HOME, '.venv')}" && "${join(KOKORO_HOME, '.venv', 'bin', 'pip')}" install kokoro-onnx soundfile numpy imageio-ffmpeg`) }
+  try { quiet(py, [...PY_ISOLATED, '-c', 'import kokoro_onnx, soundfile, numpy']); good(`python with kokoro-onnx (${py})`) } catch { miss('python with kokoro-onnx, soundfile and numpy (for the narration; --no-voice works without)', `python3 -m venv "${join(KOKORO_HOME, '.venv')}" && "${join(KOKORO_HOME, '.venv', 'bin', 'pip')}" install kokoro-onnx soundfile numpy imageio-ffmpeg`) }
   const k = kokoroFiles()
   if (existsSync(k.model) && existsSync(k.voices)) good(`kokoro model files (${resolve(k.model, '..')})`)
   else miss('kokoro model files (about 340 MB, for the narration)', `mkdir -p "${KOKORO_HOME}" && cd "${KOKORO_HOME}" && curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/kokoro-v1.0.onnx && curl -LO https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1/voices-v1.0.bin`)
