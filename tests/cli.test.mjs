@@ -76,7 +76,7 @@ test('video refuses a hand-edited story that names something private, before dra
     const story = join(dir, 'story.json')
     writeFileSync(story, JSON.stringify({ format: 'landscape', voiceOff: true, scenes: [{ id: 'title', type: 'title', say: 'Ask jo@example.org about it.', data: {} }] }))
     const r = run(['video', story, '--no-voice'])
-    assert.equal(r.status, 1); assert.match(r.stderr, /privacy scan found 1 item\(s\) \(email\)\. Nothing was rendered/)
+    assert.equal(r.status, 1); assert.match(r.stderr, /privacy scan found 1 item\(s\): email \(line \d+\)\. Nothing was rendered/)
     assert.ok(!existsSync(join(dir, 'summary.mp4')))
   } finally { rmSync(dir, { recursive: true, force: true }) }
 })

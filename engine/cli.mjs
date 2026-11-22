@@ -9,8 +9,9 @@ import { analyse, loadConfig } from './lib/pipeline.mjs'
 import { renderReplay } from './lib/html.mjs'
 import { safeWrite, removeStale } from './lib/safewrite.mjs'
 import { formatMs } from './lib/stats.mjs'
-import { makeRedactor, findHomeUsers } from './lib/redact.mjs'
-import { findLeaks, scanOutput } from './lib/scan.mjs'
+import { makeRedactor, learnUsers } from './lib/redact.mjs'
+import { findLeaks, scanOutput, describe, nameHashes, findHashedNames, pathHints, scannable } from './lib/scan.mjs'
+import { lstatSync } from 'node:fs'
 import { parseText, readTranscriptText, findProjectDirs } from './lib/load.mjs'
 
 const HELP = `trace-studio: turn an AI agent run into a replay you can watch and share.
@@ -121,15 +122,21 @@ function run(file, flags) {
   return { ...result, s }
 }
 
+/** Names in system paths that may be private: printed, never blocking. */
+function hint(files) {
+  const names = [...new Set(files.flatMap(([p, c]) => pathHints(scannable(p, c))))]
+  if (names.length) warn(`check these app and folder names; if one is private, add --term NAME: ${names.join(', ')}`)
+}
+
 /** Scan every output; throw when any has a finding (unless --force, which only warns). */
 function scanAll(files, flags, s) {
   const problems = []
   for (const [path, content] of files) {
     const leaks = scanOutput(path, content, s.scan)
-    if (leaks.length) problems.push(`${basename(path)}: ${leaks.length} item(s) (${[...new Set(leaks.map((l) => l.kind))].join(', ')})`)
+    if (leaks.length) problems.push(`${basename(path)}: ${leaks.length} item(s): ${describe(leaks)}`)
   }
   if (problems.length) {
-    if (!flags.force) throw new Error(`the privacy scan still found private items, so nothing was written:\n  ${problems.join('\n  ')}\nAdd --term or --allow, or --force to write anyway.`)
+    if (!flags.force) throw new Error(`the privacy scan still found private items, so nothing was written:\n  ${problems.join('\n  ')}\nLine numbers count lines of the file's text after JSON escapes are undone. To see them in place, write to a scratch folder with --force and run: trace-studio scan <file>. Then add --term NAME for a private word, or --allow TEXT for a value that is safe.`)
     warn(`warning: written because of --force although the scan flags:\n  ${problems.join('\n  ')}`)
   }
 }
@@ -137,8 +144,12 @@ function scanAll(files, flags, s) {
 /** Scan every output first; write them only when none has a finding (or --force). Never follows links. */
 function writeChecked(files, flags, s) {
   scanAll(files, flags, s)
+  hint(files)
   return files.map(([path, content]) => safeWrite(path, content))
 }
+
+/** The story with salted hashes of the private names, so a later `video` can check edits for them. */
+const withPrivacy = (story, s) => ({ ...story, privacy: nameHashes([...(s.scan.users || []), ...(s.scan.terms || [])]) })
 
 function summary(stats) {
   const r = stats.redaction
@@ -171,7 +182,7 @@ async function main(argv) {
     for (const f of pos) {
       const leaks = scanOutput(f, readFileSync(f, 'utf8'), s.scan)
       const kinds = {}; for (const l of leaks) kinds[l.kind] = (kinds[l.kind] || 0) + 1
-      say(`${leaks.length ? 'FOUND' : 'clean'}  ${f}${leaks.length ? '  ' + JSON.stringify(kinds) : ''}`)
+      say(`${leaks.length ? 'FOUND' : 'clean'}  ${f}${leaks.length ? '  ' + JSON.stringify(kinds) + '\n       ' + describe(leaks, 12) : ''}`)
       if (leaks.length) bad++
     }
     return bad ? EXIT.failed : EXIT.ok
@@ -179,7 +190,7 @@ async function main(argv) {
   if (cmd === 'redact') {
     const file = inputFile(pos[0]), s = settings(flags)
     const body = readTranscriptText(file)
-    const users = [...(s.config.redact?.users || []), ...findHomeUsers(body)]
+    const users = [...(s.config.redact?.users || []), ...learnUsers(body)]
     s.scan.users = users
     const redactor = makeRedactor({ ...(s.config.redact || {}), ...s.redact, users, projects: [...(s.config.redact?.projects || []), ...findProjectDirs(body)] })
     const { records, warnings } = parseText(body, { redact: redactor })
@@ -197,8 +208,8 @@ async function main(argv) {
     let out, content
     if (cmd === 'stats') { content = JSON.stringify(r.stats, null, 2) + '\n'; out = flags.out }
     else if (cmd === 'html') { content = renderReplay({ trace: r.trace, stats: r.stats, redaction: r.redaction, title: r.s.title, fonts: r.s.fonts }); out = flags.out || 'replay.html' }
-    else { const { buildStory } = await import('./lib/story.mjs'); content = JSON.stringify(buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } }), null, 2) + '\n'; out = flags.out || 'story.json' }
-    if (!out) { process.stdout.write(content); return EXIT.ok }
+    else { const { buildStory } = await import('./lib/story.mjs'); content = JSON.stringify(withPrivacy(buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } }), r.s), null, 2) + '\n'; out = flags.out || 'story.json' }
+    if (!out) { scanAll([['stats.json', content]], flags, r.s); process.stdout.write(content); return EXIT.ok }
     writeChecked([[resolve(out), content]], flags, r.s)
     say(`${resolve(out)}\n${summary(r.stats)}`)
     return EXIT.ok
@@ -208,8 +219,11 @@ async function main(argv) {
     if (!story || !existsSync(story)) throw new UsageError('give a story.json (make one with: trace-studio story <transcript>)')
     // a story may have been edited by hand: scan it before anything is drawn from it
     const s = settings(flags)
-    const leaks = findLeaks(readFileSync(story, 'utf8'), s.scan)
-    if (leaks.length && !flags.force) throw new Error(`${basename(story)}: the privacy scan found ${leaks.length} item(s) (${[...new Set(leaks.map((l) => l.kind))].join(', ')}). Nothing was rendered. Edit the story, or add --allow, or --force.`)
+    const storyText = readFileSync(story, 'utf8')
+    let stored = null; try { stored = JSON.parse(storyText).privacy } catch {}
+    // the names learned when the story was made are checked again, from their salted hashes
+    const leaks = [...findLeaks(storyText.replace(/"privacy"\s*:\s*\{[\s\S]*?\]\s*\}/, '"privacy": {}'), s.scan), ...findHashedNames(storyText.replace(/"privacy"\s*:\s*\{[\s\S]*?\]\s*\}/, ''), stored)]
+    if (leaks.length && !flags.force) throw new Error(`${basename(story)}: the privacy scan found ${leaks.length} item(s): ${describe(leaks)}. Nothing was rendered. Edit the story, or add --allow, or --force.`)
     const { renderStoryFile } = await import('./lib/video.mjs')
     const out = await renderStoryFile(story, { out: flags.out ? resolve(flags.out) : join(dirname(story), 'summary.mp4'), ...videoFlags(flags), log: say })
     say(out.mp4)
@@ -218,9 +232,10 @@ async function main(argv) {
   if (cmd === 'build') {
     const file = inputFile(pos[0])
     const dir = resolve(flags.out || 'trace-out')
+    try { if (lstatSync(dir).isSymbolicLink()) throw new Error(`${dir} is a symbolic link; refusing to write into it`) } catch (e) { if (e.code !== 'ENOENT') throw e }
     const r = run(file, flags)
     const { buildStory } = await import('./lib/story.mjs')
-    const story = buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } })
+    const story = withPrivacy(buildStory({ trace: r.trace, stats: r.stats, title: r.s.title, video: { ...(r.s.config.video || {}), ...videoFlags(flags) } }), r.s)
     const files = [
       ['redaction', join(dir, 'redaction.json'), JSON.stringify({ ...r.redaction, skippedLines: r.warnings }, null, 2) + '\n'],
       ['stats', join(dir, 'stats.json'), JSON.stringify(r.stats, null, 2) + '\n'],
@@ -230,6 +245,7 @@ async function main(argv) {
     // every output is scanned before any is written, and outputs of an earlier run are removed
     const scanned = files.map(([, p, c]) => [p, c])
     scanAll(scanned, flags, r.s)
+    hint(scanned)
     removeStale([...files.map(([, p]) => p), ...['summary.mp4', 'summary-poster.jpg', 'summary.vtt'].map((f) => join(dir, f))])
     for (const [p, c] of scanned) safeWrite(p, c)
     const paths = Object.fromEntries(files.map(([k, p]) => [k, p]))

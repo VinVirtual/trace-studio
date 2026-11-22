@@ -65,7 +65,8 @@ export function toolSummary(name, input) {
   const pick = input.command ?? input.cmd ?? input.file_path ?? input.path ?? input.filePath ?? input.notebook_path ?? input.pattern ?? input.query ?? input.url ?? input.description ?? input.prompt ?? input.skill
   const first = pick ?? Object.values(input).find((v) => typeof v === 'string')
   const text = Array.isArray(first) ? first.join(' ') : str(first ?? '')
-  return text.split('\n')[0].replace(/<project>[/\\]/g, '').slice(0, 160)
+  // never end on half a placeholder ("[redac"): the final scan would take it for a value
+  return text.split('\n')[0].replace(/<project>[/\\]/g, '').slice(0, 160).replace(/(?:\[[a-z-]{0,16}|<[a-z]{0,8})$/, '…')
 }
 
 function editsFromInput(name, input) {

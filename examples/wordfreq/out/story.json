@@ -302,6 +302,7 @@
         "redacted": 56,
         "counts": {
           "key": 4,
+          "pii": 0,
           "email": 2,
           "home": 0,
           "project": 44,
@@ -313,5 +314,14 @@
         }
       }
     }
-  ]
+  ],
+  "privacy": {
+    "salt": "84ca041ba7c3be46",
+    "names": [
+      {
+        "length": 4,
+        "hash": "226bbce8df8774578307f063b7338e54"
+      }
+    ]
+  }
 }

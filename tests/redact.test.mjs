@@ -43,7 +43,7 @@ test('AWS secret access keys in assignments are replaced', () => {
 test('emails are replaced, including inside text and angle brackets', () => {
   const r = testRedactor()
   assert.equal(r.text('mail jo.bloggs+tag@mail.example.co.uk now'), `mail ${MARK.email} now`)
-  assert.equal(r.text('Author: Dana <dana@example.com>'), `Author: Dana <${MARK.email}>`)
+  assert.equal(r.text('Contact: Dana <dana@example.com>'), `Contact: Dana <${MARK.email}>`)
   assert.equal(r.report().counts.email, 2)
 })
 

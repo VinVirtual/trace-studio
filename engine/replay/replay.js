@@ -337,7 +337,7 @@
     if (red && red.total) {
       priv.appendChild(el('div', null, red.total + ' item' + (red.total === 1 ? ' was' : 's were') + ' replaced before this page was made:'))
       const ul = el('ul')
-      const names = { key: 'keys and tokens', email: 'email addresses', home: 'home folder paths', project: 'project folder paths', path: 'other absolute paths', user: 'user names', host: 'host names', ip: 'IP addresses', term: 'listed terms' }
+      const names = { key: 'keys and tokens', pii: 'card, ID and phone numbers', email: 'email addresses', home: 'home folder paths', project: 'project folder paths', path: 'other absolute paths', user: 'user names', host: 'host names', ip: 'IP addresses', term: 'listed terms' }
       Object.keys(red.counts).forEach(function (k) { if (red.counts[k]) ul.appendChild(el('li', null, red.counts[k] + ' ' + (names[k] || k))) })
       priv.appendChild(ul)
     } else priv.appendChild(el('div', null, 'Nothing matched the anonymiser’s patterns.'))

@@ -2,6 +2,7 @@
   "total": 56,
   "counts": {
     "key": 4,
+    "pii": 0,
     "email": 2,
     "home": 0,
     "project": 44,

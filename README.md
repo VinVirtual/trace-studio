@@ -12,6 +12,8 @@ Give it a Claude Code session file, or an Anthropic or OpenAI message log. It re
 2. **`summary.mp4`**: a 30 to 60 second narrated video of how the agent solved the task, with captions. Drawn on a canvas in headless Chrome and voiced locally with Kokoro.
 3. **`stats.json`**: time taken, steps, tool calls and failures, files and lines changed, tokens when the log has them, and what the anonymiser replaced.
 
+> **Redaction is best-effort pattern matching.** It removes what has a recognisable shape (keys, emails, paths, names it can learn from the log) and checks every output again before writing it, but it cannot understand what it reads. **Always open `replay.html` and skim it before you share it**, and pass the names of your organisation, repositories, clients and colleagues with `--term NAME` so they are replaced everywhere.
+
 It is packaged as a [Claude Code](https://claude.com/claude-code) skill (`SKILL.md` tells the assistant how to use it) and works by hand from the command line. Plain Node.js for the page and stats; no npm packages to install.
 
 ![The replay page for the example run: the title, the play bar with one coloured block per step, the person's request, the agent's reply, tool calls with durations and a failed test run marked in red, and a side panel with the time, tool counts, files changed and what was anonymised](docs/replay.jpg)
@@ -56,7 +58,7 @@ $T/trace-studio build latest --out run-replay --term "Client Name"
 $T/trace-studio build path/to/log.json --out run-replay --no-video   # page and stats only, in seconds
 ```
 
-`build` writes `redaction.json`, `stats.json`, `replay.html`, `story.json`, `summary.mp4`, `summary-poster.jpg` and `summary.vtt`. To change what the narrator says, edit the `say` lines in `story.json` and run `$T/trace-studio video run-replay/story.json`.
+`build` writes `redaction.json`, `stats.json`, `replay.html`, `story.json`, `summary.mp4`, `summary-poster.jpg` and `summary.vtt`. `story.json` is a working file: besides the narration it keeps salted hashes of the names learned from the log, so a later `video` can check your edits for them. Short names can be guessed from such hashes, so share the page and the video, not `story.json`. To change what the narrator says, edit the `say` lines in `story.json` and run `$T/trace-studio video run-replay/story.json`.
 
 Other commands: `html`, `stats`, `story`, `video` (one output each), `redact` (an anonymised copy of the transcript), `scan` (look for private items in any file), `check`, `test`. `trace-studio help` lists every option.
 
@@ -82,29 +84,32 @@ Other commands: `html`, `stats`, `story`, `video` (one output each), `redact` (a
 
 ### What is replaced
 
-Invisible characters (zero-width spaces, soft hyphens) are removed first, so they cannot split a key.
+Terminal colour codes and invisible characters (zero-width spaces, soft hyphens) are removed first, so they cannot split a key or a path.
 
 | Kind | Examples | Becomes |
 |---|---|---|
-| keys and tokens | `sk-…`, Stripe `sk_`/`rk_`/`whsec_`, `AKIA…`, `ghp_…`, `github_pat_…`, GitLab, Slack tokens and webhook URLs, Discord webhooks, Google, Hugging Face, npm, SendGrid, Twilio, Supabase, DigitalOcean, JWTs, PEM/OpenSSH/PGP private key blocks, keys wrapped over lines, Azure `AccountKey=`, `Bearer …`, `Cookie:`/`Set-Cookie:` and `curl -b`, `--password x`, `mysql -px`, `curl -u user:pass`, `scheme://user:pass@` (also `redis://:pass@`), values of secret-named environment variables of this shell | `[redacted-key]` |
-| secret-named values | any `NAME=value` or `name: value` whose name contains password, pwd, secret, token, api key, private key, access key, credential, auth or ends in `_KEY` (`DB_PASSWORD`, `SECRET_KEY_BASE`, `X-Api-Key`, `_authToken`). Password names: any value of 3+ characters. Others: values that look like secrets (digits, mixed case, symbols or length) | `[redacted-key]` |
-| emails | `dana@example.com`, `"a b"@example.com`, `bob@bücher.de`, `bob%40example.com`, `bob\u0040…`, full-width `＠` | `[redacted-email]` |
+| keys and tokens | `sk-…`, Stripe `sk_`/`rk_`/`whsec_`, `AKIA…`, `ghp_…`, `github_pat_…`, GitLab, Slack tokens and webhook URLs, Discord bot tokens and webhooks, Telegram bot tokens, Google, Hugging Face, npm, SendGrid, Twilio, Supabase, DigitalOcean, Replicate, Groq, Mailgun, JWTs, PEM/OpenSSH/PGP private key blocks, keys wrapped over lines, Azure `AccountKey=`, `Bearer …`, `Cookie:`/`Set-Cookie:` and `curl -b`, `scheme://user:pass@` (also `redis://:pass@`), secrets in query strings (`?key=`, `sig=`, `X-Amz-Signature=`), a bare 40-character AWS secret key near "aws" or "secret", base64 text that decodes to any of these, values of secret-named environment variables of this shell | `[redacted-key]` |
+| command-line passwords | `--password x`, `mysql -px`, `curl -u user:pass`, `sshpass -p`, `redis-cli -a`, `openssl -k` / `-passin pass:`, `htpasswd -b`, `echo user:pw \| chpasswd`, `.pgpass` lines | `[redacted-key]` |
+| secret-named values | also when escaped inside JSON, URL-encoded (`password%3D…`), split over two lines (`- name: DB_PASSWORD` / `value: x`), as `{"name": …, "value": …}` pairs, lists, `<password>x</password>`, Markdown table rows, and JSON numbers under keys like `pin`. Any `NAME=value` or `name: value` whose name contains password, pwd, secret, token, api key, private key, access key, credential, auth or ends in `_KEY` (`DB_PASSWORD`, `SECRET_KEY_BASE`, `X-Api-Key`, `_authToken`). Password names: any value of 3+ characters. Others: values that look like secrets (digits, mixed case, symbols or length) | `[redacted-key]` |
+| emails | `dana@example.com`, `"a b"@example.com`, `bob@bücher.de`, `bob%40example.com`, `bob\u0040…`, full-width `＠`, `dana&#64;…`, `dana [at] example [dot] com` | `[redacted-email]` |
+| personal numbers | payment card numbers (Luhn-checked, spaced, dashed, bare or JSON numbers), US social security numbers, IBANs (checksum), phone numbers (`+44 20 …`, `(415) 555-…`) | `[redacted-number]` |
 | project folder | the session's working folder | `<project>` (paths inside it are shown relative) |
 | project name | the folder's name and the folders between it and home, anywhere (`git clone …/acme-portal.git`) | `[redacted]` (`--allow NAME` keeps one; `--keep-project-name` keeps all) |
-| home folders | `/home/x`, `/Users/x`, `/Users/Bob Smith/`, `/Volumes/Disk/Users/x`, `/mnt/c/Users/x`, `C:\Users\x`, `C:\\Users\\x`, `/root` | `~` |
+| home folders | `/home/x`, `/Users/x`, `/Users/Bob Smith/`, `/Volumes/Disk/Users/x`, `/mnt/c/Users/x`, `C:\Users\x`, `C:\\Users\\x`, `%2Fhome%2Fx`, `/root`, also after `-I`, `=`, `:`, in `file://` and `vscode-remote://` addresses and PATH lists | `~` |
 | other paths | UNC paths (`\\server\share`, `//server/share`); absolute paths under `/tmp`, `/var`, `/opt`, `/mnt`, `/srv`, `/data`, … | `\\[redacted-host]\…\last`, `/…/last-part` |
-| users and hosts | this machine's user and host names, user names seen in any home folder in the log, `me@box:~$` prompts, `ssh user@host` targets, `*.local`, `*.internal`, `*.lan`, `*.corp`. Names of 4+ characters are also found inside longer words (`casey_test`, `caseybox2`) | `[redacted-user]`, `[redacted-host]` |
+| users and hosts | this machine's user and host names; names the log gives away (home folders, `whoami`, `id`, `echo $USER` output, `/etc/passwd` lines with the full name, git `Author:`/`Co-authored-by:` lines and `user.name`); shell prompts (`me@box:~$`, zsh `me@box ~ %`, `[me@box dir]$`), `ssh user@host` targets, `*.local`, `*.internal`, `*.lan`, `*.corp`. Names of 4+ characters are also found inside longer words (`casey_test`, `caseybox2`) | `[redacted-user]`, `[redacted-host]` |
 | network addresses | IPv4 except `127.0.0.1` and `0.0.0.0`, IPv6, MAC addresses | `[redacted-ip]` |
 | your words | every `--term`, anywhere in a word, any case (terms under 4 characters as whole words) | `[redacted]` |
 
-System paths (`/usr`, `/bin`, `/etc`, `/dev`), URLs and code such as `password = getPassword()` are kept. `--allow` keeps a value; `--keep-paths` and `--keep-ips` switch those kinds off.
+System paths (`/usr`, `/bin`, `/etc`, `/dev`), URLs and code such as `password = getPassword()` are kept. App and folder names in system paths that may be private (an in-house tool under `/opt`, `../billing-internal`) are listed on the terminal as a hint, not replaced. Bots (`dependabot[bot]`, `github-actions[bot]`) and `Claude` are kept as author names; `--allow NAME` keeps others. `--allow` keeps a value; `--keep-paths` and `--keep-ips` switch those kinds off.
 
 ## Limits
 
 Read these before you share anything.
 
+- **Redaction is best-effort pattern matching. Review `replay.html` before sharing it.** Add the names of your organisation, repositories, clients and colleagues with `--term`.
 - **The anonymiser matches shapes, not meaning.** It is cautious on purpose: user and project names are replaced inside other words too, so a user called `mark` also turns `markdown` into `[redacted-user]down` (names under 4 characters are matched as whole words only). It cannot know that "Falcon" is a secret project, that a sentence describes a client, or that a pasted document is confidential. List such words with `--term`, and read the page before sharing it.
-- **Unusual secrets slip through.** Host names on ordinary public domains (`db.example.com`) are kept. A password in a sentence with no secret word near it, a key in a format not listed above, a private key without its header line, base64-encoded credentials. The scan at the end adds a few looser checks, but it mostly reruns the same patterns, so it misses most of what they miss.
+- **Unusual secrets slip through.** Host names on ordinary public domains (`db.example.com`) are kept. A password in a sentence with no secret word near it, a key in a format not listed above, a private key without its header line, base64-encoded credentials. The scan at the end reruns every rule and adds a few looser checks, so it misses most of what the rules miss. When it blocks a write it names the rule and the line; a story edited by hand is checked against the names learned from the log through salted hashes, so `story.json` never holds them.
 - **The narration is filled in from counts, not understood.** It says "a command failed" and "the same command ran without an error four steps later"; it does not know why. It never says what the task was in its own words: the title scene shows the person's first message instead. Edit `story.json` if you want more.
 - **"Biggest edit" means most lines changed**, which is not always the most important change.
 - **Times come from the log.** Wall time includes every pause, even days between a session and its resumption (`activeMs` caps idle gaps at 5 minutes). A tool's duration is the gap between its call and its result being written.

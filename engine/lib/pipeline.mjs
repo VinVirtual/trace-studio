@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { readTranscriptText, parseText, findProjectDirs } from './load.mjs'
 import { parseRecords, DEFAULTS } from './parse.mjs'
 import { computeStats } from './stats.mjs'
-import { makeRedactor, findHomeUsers, projectTerms } from './redact.mjs'
+import { makeRedactor, learnUsers, projectTerms } from './redact.mjs'
 
 const REDACT_KEYS = new Set(['keepProjectName', 'users', 'allow', 'terms', 'keepPaths', 'keepIps', 'projects', 'home', 'user', 'hostname', 'envSecrets', 'machine', 'secrets'])
 const TOP_KEYS = new Set(['redact', 'maxOutput', 'maxText', 'thinking', 'title', 'fonts', 'video'])
@@ -39,7 +39,7 @@ export function analyse({ file, text, config = {}, redact = {}, ...opts }) {
   // folders the transcript names as its working directory are shown as <project>
   const projects = [...(config.redact?.projects || []), ...(redact.projects || []), ...findProjectDirs(body)]
   // people whose home folders appear in the log are treated like this machine's user name
-  const users = [...new Set([...(config.redact?.users || []), ...(redact.users || []), ...findHomeUsers(body)])]
+  const users = [...new Set([...(config.redact?.users || []), ...(redact.users || []), ...learnUsers(body)])]
   // the project's own folder name (and the folders above it, below home) are hidden everywhere
   const allow = [...(config.redact?.allow || []), ...(redact.allow || [])]
   const terms = [...new Set([...(config.redact?.terms || []), ...(redact.terms || []), ...(config.redact?.keepProjectName || redact.keepProjectName ? [] : projectTerms(projects, allow))])]

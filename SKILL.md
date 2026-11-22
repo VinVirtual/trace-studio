@@ -12,17 +12,17 @@ Skill folder: `~/.claude/skills/trace-studio/` (written `$T` below). Every comma
 ## Workflow
 
 1. **Find the transcript.** `$T/trace-studio list` shows Claude Code sessions on this machine, newest first (date, size, path). `latest` means the newest one, which is usually the session you are in right now. It prints the path it picked: tell the user which session that is and confirm it is the one they mean before building. Other inputs: an Anthropic Messages log, an OpenAI Chat Completions log or a list of OpenAI Responses items, as `.json` or `.jsonl` (README.md, "Inputs").
-2. **Ask about private words.** The anonymiser catches things with a recognisable shape. It cannot know a client's name, a product code name or a colleague's name. Ask: "Are there names of clients, products or people in this session that must not appear?" Pass each with `--term NAME` (or `redact.terms` in a config file). Keep a value with `--allow TEXT`.
+2. **Ask about private words.** Redaction is best-effort pattern matching: it catches things with a recognisable shape and names the log gives away, but it cannot know a client's name, a product code name, the organisation or repository names, or a colleague's name. Ask: "Which names of your organisation, repositories, clients, products or people must not appear?" Pass each with `--term NAME` (or `redact.terms` in a config file). Keep a value with `--allow TEXT`.
 3. **Build:** `$T/trace-studio build <transcript> --out <dir> [--term X]...`. It writes `redaction.json`, `stats.json`, `replay.html`, `story.json`, then renders `summary.mp4` with a poster and captions. Add `--no-video` for the page and stats only (seconds, no extra tools). Every output is scanned for anything private before it is written; if the scan finds something, nothing is written and the command says what kind of item it was.
 4. **Look at what you made before handing it over.**
-   - Open `replay.html` in a browser (with Playwright, take a screenshot and Read it). Check the title, a tool call with its output open, and a diff.
+   - Open `replay.html` and skim it **with the user**: tell them where it is, open it in their browser, and ask them to look through it before sharing (with Playwright you can also take screenshots and Read them). Check the title, the person's messages, tool outputs and diffs. Do not call the page safe to share until the user has looked.
    - Read `redaction.json`: counts per kind. Zero home paths on a coding session is suspicious: check the page.
    - Search the page for the user's real name, company and project names: `$T/trace-studio scan <file> --term NAME` exits 1 when it finds one.
    - For the video, Read the poster (`summary-poster.jpg`) and a few frames pulled with ffmpeg (`-vf fps=1/6,tile=2x4`) to check every scene. You cannot hear the audio; check the duration and loudness with `ffmpeg -i summary.mp4 -af volumedetect -f null -` and say that you did.
 5. **Improve the narration if asked.** `story.json` holds one `say` line per scene, filled in from counted facts. The first scene says only that the agent was given a task. You may rewrite lines in plain words (for example, what the task was), then run `$T/trace-studio video <dir>/story.json`. Only state what the transcript shows. Never claim the agent "fixed" something unless a later step shows it working, and never invent numbers.
 6. **Report back:** the paths, the step and tool counts, how many items were replaced and of which kinds, anything the scan flagged, and the reminder below.
 
-Always tell the user: **"The anonymiser removes what has a recognisable shape. Read the page before you share it."** Thinking text is left out unless they ask for `--thinking`.
+Always tell the user: **"Redaction is best-effort pattern matching. Please skim replay.html before you share it, and tell me any names to add with --term."** Thinking text is left out unless they ask for `--thinking`.
 
 ## Commands
 
@@ -61,6 +61,8 @@ Invisible characters (zero-width spaces, soft hyphens) are removed first, so the
 
 Fields that identify an account or request are dropped and inline images removed. The final scan reruns these patterns on every output, plus looser checks of its own: long random-looking strings near secret words, any `-----BEGIN` block that is not public, credentials in URLs. All outputs are scanned before any is written; outputs of an earlier run in the same folder are removed, and output paths that are symbolic links are refused.
 
+Also replaced: Telegram, Discord, Replicate, Groq and Mailgun tokens; names from `whoami`, `id`, passwd lines and git authors; zsh and bracket prompts; values split from their names (YAML `name:`/`value:`, XML, JSON pairs, lists, Markdown tables); `sshpass`, `redis-cli -a`, `openssl -k`, `htpasswd -b`, `chpasswd`, `.pgpass`; query-string signatures, bare AWS secret keys, base64 that hides a secret; card numbers, SSNs, IBANs, phone numbers; colour codes are stripped first. The terminal lists app and folder names in system paths as a hint.
+
 **Still kept:** host names on public domains (`db.example.com`), secrets with no recognisable shape and no secret word near them, names nobody listed. Read the page before sharing.
 
 ## Troubleshooting
@@ -69,4 +71,4 @@ Fields that identify an account or request are dropped and inline images removed
 - **"the privacy scan still found private items"**: the message lists each file and the kinds found. Write with `--force` into a scratch folder, run `scan` on it to see where, then fix with `--term` or `--allow`. Never pass `--force` for a file that will be shared without the user's say-so.
 - **Video fails at "narrate"**: Kokoro is missing; run `$T/check_env.sh`, or use `--no-voice`.
 - **The run's wall time is days long**: the session was resumed later. `stats.json` also has `activeMs`, which caps each idle gap at 5 minutes.
-- **Huge sessions**: a 314 MB transcript took about 77 seconds and 1.4 GB of memory here. Long outputs are cut to `--max-output` characters (head and tail kept).
+- **Huge sessions**: a 314 MB transcript took about 4 minutes and 4 GB of memory here (every rule runs twice: once to clean, once in the final scan). Long outputs are cut to `--max-output` characters (head and tail kept).
