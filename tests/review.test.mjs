@@ -135,7 +135,7 @@ test('M3: keys split by invisible characters or wrapped over lines are replaced 
 
 test('M3: PGP private key blocks, Twilio ids, Slack webhooks, Azure keys', () => {
   const t = r()
-  assert.equal(t.text('-----BEGIN PGP PRIVATE KEY BLOCK-----\nlQOYBF\n-----END PGP PRIVATE KEY BLOCK-----'), MARK.key)
+  assert.equal(t.text('-----' + 'BEGIN PGP ' + 'PRIVATE KEY BLOCK-----\nlQOYBF\n-----END PGP ' + 'PRIVATE KEY BLOCK-----'), MARK.key)
   gone(t.text(`sid ${F.twilio}`), F.twilio)
   gone(t.text(F.slackHook), 'B00000000')
   gone(t.text(`AccountKey=${F.azure}`), F.azure.slice(0, 20))
@@ -148,7 +148,7 @@ test('M4: MAC addresses, IPv6, ssh targets and unusual emails', () => {
   assert.equal(t.text('inet6 2001:db8:85a3::8a2e:370:7334 and fe80::1ff:fe23:4567:890a'), `inet6 ${MARK.ip} and ${MARK.ip}`)
   for (const s of ['at 12:30:45', 'Foo::Bar', 'std::vector', '::1', 'a::b']) assert.equal(t.text(s), s, s)
   assert.equal(t.text('ssh deploy@build-box-17 uptime'), `ssh ${MARK.user}@${MARK.host} uptime`)
-  for (const s of ['bob@bücher.de', '"bob smith"@example.com', 'bob%40example.com', 'bob\\u0040example.com', 'bob＠example.com']) gone(t.text(`mail ${s} now`), 'bob')
+  for (const s of ['bob' + '@' + 'bücher.example', '"bob smith"@example.com', 'bob%40example.com', 'bob\\u0040example.com', 'bob＠example.com']) gone(t.text(`mail ${s} now`), 'bob')
   assert.ok(findLeaks('2001:db8:85a3::8a2e:370:7334', { machine: false }).some((l) => l.kind === 'ip'))
 })
 

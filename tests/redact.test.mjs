@@ -5,6 +5,9 @@ import { findLeaks } from '../engine/lib/scan.mjs'
 import { makeRedactor, allowTester, envSecrets, findHomeUsers, MARK } from '../engine/lib/redact.mjs'
 import { testRedactor } from './helpers.mjs'
 
+// pieces of fake credentials, joined at run time so no secret-shaped text is stored in this file
+const AT = '@', BEGIN = '-----' + 'BEGIN ', PRIV = 'PRIVATE ' + 'KEY-----'
+
 // Made-up values in the shape of real credentials, built in pieces so no scanner mistakes this file for a leak.
 const FAKE = {
   openai: 'sk-' + 'proj-' + 'a1B2c3D4e5F6g7H8i9J0k1L2',
@@ -42,7 +45,7 @@ test('AWS secret access keys in assignments are replaced', () => {
 
 test('emails are replaced, including inside text and angle brackets', () => {
   const r = testRedactor()
-  assert.equal(r.text('mail jo.bloggs+tag@mail.example.co.uk now'), `mail ${MARK.email} now`)
+  assert.equal(r.text('mail jo.bloggs+tag' + AT + 'mail.sub.example.org now'), `mail ${MARK.email} now`)
   assert.equal(r.text('Contact: Dana <dana@example.com>'), `Contact: Dana <${MARK.email}>`)
   assert.equal(r.report().counts.email, 2)
 })
@@ -147,18 +150,18 @@ test('the allow list keeps exact strings and /regex/ matches', () => {
 
 test('authorization headers, password assignments and URL passwords are replaced; prose is kept', () => {
   const r = testRedactor()
-  assert.equal(r.text('Authorization: Bearer abcdef123456.xyz-789'), `Authorization: Bearer ${MARK.key}`)
+  assert.equal(r.text('Authorization: ' + 'Bearer ' + 'abcdef123456.xyz-789'), `Authorization: Bearer ${MARK.key}`)
   assert.equal(r.text('password=hunter2hunter2'), `password=${MARK.key}`)
-  assert.equal(r.text('postgres://admin:s3cr3tpass@db/app'), `postgres://admin:${MARK.key}@db/app`)
+  assert.equal(r.text('postgres://admin:' + 's3cr3tpass' + AT + 'db/app'), `postgres://admin:${MARK.key}@db/app`)
   assert.equal(r.text('password: correcthorsebattery'), `password: ${MARK.key}`)
   for (const s of ['password: required', 'The password: must be 8 characters long', 'token count: 12', 'secret: everything is fine']) assert.equal(r.text(s), s)
 })
 
 test('private key blocks are removed whole, even when cut off', () => {
   const r = testRedactor()
-  const block = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk\nAAAA\n-----END OPENSSH PRIVATE KEY-----'
+  const block = BEGIN + 'OPENSSH ' + PRIV + '\nb3BlbnNzaC1rZXk\nAAAA\n-----END OPENSSH ' + PRIV
   assert.equal(r.text(`key:\n${block}\nok`), `key:\n${MARK.key}\nok`)
-  assert.equal(r.text('-----BEGIN RSA PRIVATE KEY-----\nMIIabc'), MARK.key)
+  assert.equal(r.text(BEGIN + 'RSA ' + PRIV + '\nMIIabc'), MARK.key)
 })
 
 test('values of secret-named environment variables are replaced wherever they appear', () => {
@@ -197,7 +200,7 @@ test('findLeaks spots what is left: keys, emails, home paths, the user and host 
   assert.ok(kinds('/Users/someone/a').includes('home'))
   assert.ok(kinds('hello casey-laptop').includes('host'))
   assert.deepEqual(kinds('acme'), ['term'])
-  assert.ok(kinds('ssh 10.0.0.5').includes('ip') && kinds('srv.corp.local').includes('host') && kinds('Authorization: Bearer abcdefghijklmnop123').includes('key'))
+  assert.ok(kinds('ssh 10.0.0.5').includes('ip') && kinds('srv.corp.local').includes('host') && kinds('Authorization: ' + 'Bearer ' + 'abcdefghijklmnop123').includes('key'))
   assert.ok(kinds('"a\\u003cjo@example.com\\u003e"').includes('email'))
   assert.deepEqual(kinds('nothing private in ~/x or <project>/y or [redacted-email] or 127.0.0.1'), [])
 })
